@@ -48,3 +48,6 @@ rt:
 	dune clean
 	make all
 	make test
+
+init:
+	eval $(opam env)

@@ -49,9 +49,11 @@ exp_base:
 | i=INT                                                                { IntExp i }
 | s=STRING                                                             { StringExp s }
 | v=var                                                                { VarExp v }
-| name = ID LPAREN expList = exp_list RPAREN                           {CallExp { func = symbol name; args = expList } }  
+| BREAK                                                                { BreakExp }
+| name=ID LBRACK size=exp RBRACK OF initVal=exp                        { ArrayExp { typ = symbol name; size = size; init = initVal} }
+| name = ID LPAREN expList = exp_list RPAREN                           { CallExp { func = symbol name; args = expList } }  
 (*Let exp*)
-| LET dl=decl_list body = exp                                          {LetExp { decls = dl; body = body } }
+| LET dl=decl_list body = exp                                          { LetExp { decls = dl; body = body } }
 (*Arithmetic*)
 | e1 = exp PLUS e2 = exp                                               { OpExp { left = e1; oper = PlusOp; right = e2 } }
 | e1 = exp MINUS e2 = exp                                              { OpExp { left = e1; oper = MinusOp; right = e2 } }
@@ -100,13 +102,14 @@ decl_list:
 decl:
 | tyList = tydecldata            { TypeDec tyList }
 | funcList = fundecldata         { FunctionDec [funcList] }
-/* (*Normal VarDec*)
-| VAR declName = ID ASSIGN valueExp = exp                           { VarDec { name = symbol declName; escape = ref true; typ = None ; init = valueExp ; pos = $startpos } }
+(*Normal VarDec*)
+ | VAR declName = ID ASSIGN valueExp = exp                           { VarDec { name = symbol declName; escape = ref true; typ = None ; init = valueExp ; pos = $startpos } }
 (*VarDec with type*)
-| VAR declName = ID COLON declType = ID ASSIGN valueExp = exp_base  { VarDec { name = symbol declName; escape = ref true ; typ = Some(symbol declType, $startpos) ; init = valueExp ; pos = $startpos } } */
-
+| VAR declName = ID COLON declType = ID ASSIGN valueExp = exp  { VarDec { name = symbol declName; escape = ref true ; typ = Some(symbol declType, $startpos) ; init = valueExp ; pos = $startpos } }
+ 
 fundecldata:
 | FUNCTION name=ID LPAREN fieldData = fielddata RPAREN COLON returnType=ID EQ body=exp { Fdecl { name = symbol name ; params= fieldData; result= Some(((symbol returnType), $startpos)) ; body= body ; pos= $startpos } }
+| FUNCTION name=ID LPAREN RPAREN COLON returnType=ID EQ body=exp { Fdecl { name = symbol name ; params= []; result= Some(((symbol returnType), $startpos)) ; body= body ; pos= $startpos } }
 
 fielddata:
 | name=ID COLON typeVal=ID { [Field { name = symbol name; escape= ref true; typ = ((symbol typeVal), $startpos); pos = $startpos }] }
@@ -118,6 +121,8 @@ tydecldata:
 
 ty:
 | id=ID { NameTy ((symbol id), $startpos)  }
+| LBRACE fieldData=fielddata RBRACE       { RecordTy fieldData }
+| ARRAY OF id = ID                       { ArrayTy ((symbol id), $startpos) }
 
 
 

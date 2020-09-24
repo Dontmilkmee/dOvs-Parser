@@ -20,20 +20,17 @@
 %token AND OR ASSIGN ARRAY IF THEN ELSE WHILE FOR TO DO
 %token LET IN END OF BREAK NIL FUNCTION VAR TYPE CARET 
 
-
 %left ASSIGN
-%left END
-%left EQ
-%left NEQ
-%left GT
-%left LT
-%left LE
-%left GE
-%left PLUS
-%left MINUS
-%left DIVIDE
-%left TIMES
+%left OR
+%left AND
+%nonassoc EQ, NEQ, GT, LT, LE, GE
+%left PLUS, MINUS
+%left TIMES, DIVIDE
 %left CARET
+%left LPAREN, RPAREN, LBRACE, RBRACE, LBRACK, RBRACK
+
+
+
 
 %start <Tigercommon.Absyn.exp> program  
 (* Observe that we need to use fully qualified types for the start symbol *)
@@ -65,7 +62,7 @@ exp_base:
 | e1 = exp DIVIDE e2 = exp                                             { OpExp { left = e1; oper = DivideOp; right = e2 } }
 | e1 = exp CARET e2 = exp                                              { OpExp { left = e1; oper = ExponentOp; right = e2 } }
 (* unary minus*)
-/* | MINUS e = exp                                                        { OpExp { left = IntExp 0; oper = MinusOp; right = e } } */
+| MINUS e = exp                                                        { OpExp { left = (IntExp 0 ^! $startpos); oper = MinusOp; right = e } }
 (* Binary *)
 | e1 = exp GT e2 = exp                                                 { OpExp { left = e1; oper = GtOp; right = e2} }
 | e1 = exp LT e2 = exp                                                 { OpExp { left = e1; oper = LtOp; right = e2} }
@@ -73,8 +70,8 @@ exp_base:
 | e1 = exp GE e2 = exp                                                 { OpExp { left = e1; oper = GeOp; right = e2} }
 | e1 = exp EQ e2 = exp                                                 { OpExp { left = e1; oper = EqOp; right = e2} }
 | e1 = exp NEQ e2 = exp                                                { OpExp { left = e1; oper = NeqOp; right = e2} }
-| e1 = exp AND e2 = exp                                                { OpExp { left = e1; oper = EqOp; right = e2} }
-| e1 = exp OR e2 = exp                                                 { OpExp { left = e1; oper = PlusOp; right = e2} }
+| e1 = exp AND e2 = exp                                                { IfExp { test = e1; thn = e2; els = Some(IntExp 0 ^! $startpos) } }
+| e1 = exp OR e2 = exp                                                 { IfExp { test = e1; thn = IntExp 1 ^! $startpos; els = Some(e2) } }
 (*If exp*)
 | IF testExp = exp THEN thenExp = exp                                  { IfExp { test = testExp; thn = thenExp; els = None } }
 | IF testExp = exp THEN thenExp = exp ELSE elseExp = exp               { IfExp { test = testExp; thn = thenExp; els = Some(elseExp) } }

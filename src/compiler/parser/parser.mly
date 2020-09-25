@@ -21,18 +21,20 @@
 %token LET IN END OF BREAK NIL FUNCTION VAR TYPE CARET 
 
 %nonassoc THEN 
-%left DO
-%left ELSE
-%left ASSIGN
+%nonassoc DO ELSE
+%nonassoc array_tag
+%nonassoc ASSIGN
 %left OR
 %left AND
-%nonassoc EQ NEQ GT LT LE, GE
+%nonassoc EQ NEQ GT LT LE GE
 %left PLUS MINUS
 %left TIMES DIVIDE
 %nonassoc unary_minus
 %right CARET
 %nonassoc FUNCTION
 %nonassoc TYPE
+
+
 
 %start <Tigercommon.Absyn.exp> program  
 (* Observe that we need to use fully qualified types for the start symbol *)
@@ -60,7 +62,7 @@ exp_base:
 | e1 = exp TIMES e2 = exp                                              { OpExp { left = e1; oper = TimesOp; right = e2 } }
 | e1 = exp DIVIDE e2 = exp                                             { OpExp { left = e1; oper = DivideOp; right = e2 } }
 | e1 = exp CARET e2 = exp                                              { OpExp { left = e1; oper = ExponentOp; right = e2 } }
-(* unary minus*)
+(* Unary minus*)
 | MINUS e = exp %prec unary_minus                                      { OpExp { left = (IntExp 0 ^! $startpos); oper = MinusOp; right = e } }
 (* Binary *)
 | e1 = exp GT e2 = exp                                                 { OpExp { left = e1; oper = GtOp; right = e2} }
@@ -72,7 +74,7 @@ exp_base:
 | e1 = exp AND e2 = exp                                                { IfExp { test = e1; thn = e2; els = Some(IntExp 0 ^! $startpos) } }
 | e1 = exp OR e2 = exp                                                 { IfExp { test = e1; thn = IntExp 1 ^! $startpos; els = Some(e2) } }
 (*Record exp*)
-| id = ID LBRACE body = rec_base RBRACE                                { RecordExp { fields = body ; typ = symbol id } }
+| id = ID LBRACE body = separated_list(COMMA, rec_base) RBRACE                                { RecordExp { fields = body ; typ = symbol id } }
 (*Sequence exp*)
 | LPAREN seqList = separated_list(SEMICOLON, exp) RPAREN               { SeqExp seqList }
 (*Assign exp*)
@@ -86,14 +88,13 @@ exp_base:
 | BREAK                                                                { BreakExp }
 (*Let exp*)
 | LET dl=list(decl) IN body = separated_list(SEMICOLON, exp) END       { LetExp { decls = dl; body = (SeqExp body ^! $startpos) } }
-| name=ID LBRACK size=exp RBRACK OF initVal=exp                        { ArrayExp { typ = symbol name; size = size; init = initVal} }
+| name=ID LBRACK size=exp RBRACK OF initVal=exp %prec array_tag        { ArrayExp { typ = symbol name; size = size; init = initVal} }
 
-rec_base:
-| id = ID EQ idValue = exp                                             { [(symbol id, idValue)] }
-| id = ID EQ idValue = exp COMMA recList = rec_base                    { [(symbol id, idValue)] @ recList  }
-| id = ID EQ idValue = exp SEMICOLON recList = rec_base                { [(symbol id, idValue)] @ recList  }
-|                                                                      { [] }
+(*Body of RecordExp*)
+%inline rec_base:
+| id = ID EQ idValue = exp                                             { (symbol id, idValue) }
 
+(*Declarations*)
 decl:
 | funcList = nonempty_list(fundecldata)                                { FunctionDec funcList }
 | tyList = nonempty_list(tydecldata)                                   { TypeDec tyList }
@@ -102,16 +103,20 @@ decl:
 (*VarDec with type*)
 | VAR declName = ID COLON declType = ID ASSIGN valueExp = exp          { VarDec { name = symbol declName; escape = ref true ; typ = Some(symbol declType, $startpos) ; init = valueExp ; pos = $startpos } }
  
+(*Funcion declaration data*)
 %inline fundecldata:
 | FUNCTION name=ID LPAREN d = separated_list(COMMA, fielddata) RPAREN COLON rt=ID EQ body=exp { Fdecl { name = symbol name ; params= d; result= Some(((symbol rt), $startpos)) ; body= body ; pos= $startpos } }
 | FUNCTION name=ID LPAREN d = separated_list(COMMA, fielddata) RPAREN EQ body=exp             { Fdecl { name = symbol name ; params= d; result= None ; body= body ; pos= $startpos } }
 
+(*Data of fields*)
 %inline fielddata:
 | name=ID COLON typeVal=ID                                             { Field { name = symbol name; escape= ref true; typ = ((symbol typeVal), $startpos); pos = $startpos } }
 
+(*Type declaration data*)
 %inline tydecldata:
 | TYPE id=ID EQ value=ty                                               { Tdecl { name = symbol id; ty = value; pos = $startpos}  }
 
+(*Type declarations*)
 ty:
 | id=ID                                                                { NameTy ((symbol id), $startpos)  }
 | LBRACE fieldData=separated_list(COMMA, fielddata) RBRACE             { RecordTy fieldData }

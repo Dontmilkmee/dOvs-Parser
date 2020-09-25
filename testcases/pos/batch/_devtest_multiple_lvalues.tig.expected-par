@@ -1,0 +1,12 @@
+VarExp(
+  SubscriptVar(
+  | SubscriptVar(
+  |   FieldVar(
+  |   | SubscriptVar(
+  |   |   FieldVar(
+  |   |   | SimpleVar(cooming),
+  |   |   | test),
+  |   |   IntExp(42)),
+  |   | compiler),
+  |   IntExp(69)),
+  | IntExp(123)))

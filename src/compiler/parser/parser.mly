@@ -2,7 +2,7 @@
 (* AU compilation.                                                        *)
 (* Skeleton file -- expected to be modified as part of the assignment     *)
 (* Do not distribute                                                      *)
-(****l**********************************************************************)
+(**************************************************************************)
 
 %{
   open Tigercommon.Absyn   
@@ -10,6 +10,7 @@
   open Tigercommon.Symbol
 %}
 
+(* Lexer Tokens *)
 %token EOF
 %token <string> ID
 %token <int> INT 
@@ -20,6 +21,7 @@
 %token AND OR ASSIGN ARRAY IF THEN ELSE WHILE FOR TO DO
 %token LET IN END OF BREAK NIL FUNCTION VAR TYPE CARET 
 
+(* Our association and priority tags *)
 %nonassoc THEN 
 %nonassoc DO ELSE
 %nonassoc array_tag
@@ -35,28 +37,20 @@
 %nonassoc TYPE
 
 
-
 %start <Tigercommon.Absyn.exp> program  
 (* Observe that we need to use fully qualified types for the start symbol *)
 
 %%
 
-(* Variables *)
-%inline var_base:
-| id=ID                                                                { SimpleVar (symbol id) }
-
-%inline var_list: 
-| DOT id=ID                                                            { FieldPart (symbol id) }
-| LBRACK e=exp RBRACK                                                  { SubscriptPart e }
-
 (* Expressions *)
 exp_base:
-| v=var                                                                { VarExp v  }
+| v = var                                                              { VarExp v  }
 | NIL                                                                  { NilExp }
-| i=INT                                                                { IntExp i }
-| s=STRING                                                             { StringExp s }
+| i = INT                                                              { IntExp i }
+| s = STRING                                                           { StringExp s }
+(* CallExp *)
 | name = ID LPAREN expList = separated_list(COMMA, exp) RPAREN         { CallExp { func = symbol name; args = expList } }
-(*Arithmetic*)
+(* Arithmetic *)
 | e1 = exp PLUS e2 = exp                                               { OpExp { left = e1; oper = PlusOp; right = e2 } }
 | e1 = exp MINUS e2 = exp                                              { OpExp { left = e1; oper = MinusOp; right = e2 } }
 | e1 = exp TIMES e2 = exp                                              { OpExp { left = e1; oper = TimesOp; right = e2 } }
@@ -73,61 +67,70 @@ exp_base:
 | e1 = exp NEQ e2 = exp                                                { OpExp { left = e1; oper = NeqOp; right = e2} }
 | e1 = exp AND e2 = exp                                                { IfExp { test = e1; thn = e2; els = Some(IntExp 0 ^! $startpos) } }
 | e1 = exp OR e2 = exp                                                 { IfExp { test = e1; thn = IntExp 1 ^! $startpos; els = Some(e2) } }
-(*Record exp*)
-| id = ID LBRACE body = separated_list(COMMA, rec_base) RBRACE                                { RecordExp { fields = body ; typ = symbol id } }
-(*Sequence exp*)
+(* Record exp *)
+| id = ID LBRACE body = separated_list(COMMA, rec_base) RBRACE         { RecordExp { fields = body ; typ = symbol id } }
+(* Sequence exp *)
 | LPAREN seqList = separated_list(SEMICOLON, exp) RPAREN               { SeqExp seqList }
-(*Assign exp*)
+(* Assign exp *)
 | variable = var ASSIGN e1 = exp                                       { AssignExp { var = variable; exp = e1 } }
-(*If exp*)
+(* If exp *)
 | IF testExp = exp THEN thenExp = exp                                  { IfExp { test = testExp; thn = thenExp; els = None } }
 | IF testExp = exp THEN thenExp = exp ELSE elseExp = exp               { IfExp { test = testExp; thn = thenExp; els = Some(elseExp) } }
-(*Loops*)
+(* Loops (WhileExp, ForExp, BreakExp) *)
 | WHILE e1 = exp DO e2 = exp                                           { WhileExp { test = e1; body = e2 } }
 | FOR id = ID ASSIGN start = exp TO lim = exp DO body = exp            { ForExp { var = symbol id; escape = ref true; lo = start; hi = lim; body = body } }
 | BREAK                                                                { BreakExp }
-(*Let exp*)
-| LET dl=list(decl) IN body = separated_list(SEMICOLON, exp) END       { LetExp { decls = dl; body = (SeqExp body ^! $startpos) } }
-| name=ID LBRACK size=exp RBRACK OF initVal=exp %prec array_tag        { ArrayExp { typ = symbol name; size = size; init = initVal} }
+(* Let exp *)
+| LET dl = list(decl) IN body = separated_list(SEMICOLON, exp) END     { LetExp { decls = dl; body = (SeqExp body ^! $startpos) } }
+(* Array exp *)
+| name = ID LBRACK size = exp RBRACK OF initVal = exp %prec array_tag  { ArrayExp { typ = symbol name; size = size; init = initVal} }
 
-(*Body of RecordExp*)
+(* Body of RecordExp *)
 %inline rec_base:
 | id = ID EQ idValue = exp                                             { (symbol id, idValue) }
 
-(*Declarations*)
+(* Declarations: FunctionDec, TypeDec and VarDec (with and without type) *)
 decl:
 | funcList = nonempty_list(fundecldata)                                { FunctionDec funcList }
 | tyList = nonempty_list(tydecldata)                                   { TypeDec tyList }
-(*Normal VarDec*)
 | VAR declName = ID ASSIGN valueExp = exp                              { VarDec { name = symbol declName; escape = ref true; typ = None ; init = valueExp ; pos = $startpos } }
-(*VarDec with type*)
-| VAR declName = ID COLON declType = ID ASSIGN valueExp = exp          { VarDec { name = symbol declName; escape = ref true ; typ = Some(symbol declType, $startpos) ; init = valueExp ; pos = $startpos } }
+| VAR declName = ID COLON declType = ID ASSIGN valueExp = exp          { VarDec { name = symbol declName; escape = ref true; typ = Some(symbol declType, $startpos) ; init = valueExp ; pos = $startpos } }
  
-(*Funcion declaration data*)
+(* Funcion declaration data Fdecl (with and without return type) *)
 %inline fundecldata:
-| FUNCTION name=ID LPAREN d = separated_list(COMMA, fielddata) RPAREN COLON rt=ID EQ body=exp { Fdecl { name = symbol name ; params= d; result= Some(((symbol rt), $startpos)) ; body= body ; pos= $startpos } }
-| FUNCTION name=ID LPAREN d = separated_list(COMMA, fielddata) RPAREN EQ body=exp             { Fdecl { name = symbol name ; params= d; result= None ; body= body ; pos= $startpos } }
+| FUNCTION name = ID LPAREN data = separated_list(COMMA, fielddata) RPAREN COLON rt = ID EQ body = exp { Fdecl { name = symbol name ; params= data; result= Some(((symbol rt), $startpos)) ; body= body ; pos= $startpos } }
+| FUNCTION name = ID LPAREN data = separated_list(COMMA, fielddata) RPAREN EQ body = exp             { Fdecl { name = symbol name ; params= data; result= None ; body= body ; pos= $startpos } }
 
-(*Data of fields*)
+(* Data of fields *)
 %inline fielddata:
-| name=ID COLON typeVal=ID                                             { Field { name = symbol name; escape= ref true; typ = ((symbol typeVal), $startpos); pos = $startpos } }
+| name = ID COLON typeVal = ID                                         { Field { name = symbol name; escape= ref true; typ = ((symbol typeVal), $startpos); pos = $startpos } }
 
-(*Type declaration data*)
+(* Type declaration data *)
 %inline tydecldata:
-| TYPE id=ID EQ value=ty                                               { Tdecl { name = symbol id; ty = value; pos = $startpos}  }
+| TYPE id = ID EQ value = ty                                           { Tdecl { name = symbol id; ty = value; pos = $startpos} }
 
-(*Type declarations*)
+(* Type declarations *)
 ty:
-| id=ID                                                                { NameTy ((symbol id), $startpos)  }
-| LBRACE fieldData=separated_list(COMMA, fielddata) RBRACE             { RecordTy fieldData }
+| id = ID                                                              { NameTy ((symbol id), $startpos)  }
+| LBRACE data = separated_list(COMMA, fielddata) RBRACE                { RecordTy data }
 | ARRAY OF id = ID                                                     { ArrayTy ((symbol id), $startpos) }
 
-(* Top-level *)
-program: e = exp EOF { e }
-
-var:
-| v=var_base vl=list(var_list) { makeLvaluePartSpec (v ^@ $startpos) $startpos vl }
-
-
+(* Exp *)
 exp:
-| e=exp_base  { e ^! $startpos }
+| e = exp_base                                                         { e ^! $startpos }
+
+(* Variables *)
+%inline var_base:
+| id = ID                                                              { SimpleVar (symbol id) }
+
+(* var List (Handle FieldVar and SubscriptVar by using FieldPart and SubscriptPart) *)
+%inline var_list: 
+| DOT id = ID                                                          { FieldPart (symbol id) }
+| LBRACK e = exp RBRACK                                                { SubscriptPart e }
+
+(* Var *)
+var:
+| v = var_base vl = list(var_list)                                     { makeLvaluePartSpec (v ^@ $startpos) $startpos vl }
+
+(* Top-level *)
+program: e = exp EOF                                                   { e }
